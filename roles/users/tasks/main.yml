@@ -1,0 +1,95 @@
+---
+
+- ansible.builtin.include_vars:
+    file: ../../group_vars/all.yml # not required. The file name from which variables should be loaded. If the path is relative, it will look for the file in vars/ subdirectory of a role or relative to playbook.
+
+- name: Validate username format
+  assert:
+    that:
+      - "item.username is match(username_pattern) or item.username is match(service_account_pattern)"
+    fail_msg: "Username {{ item.username }} does not match required pattern"
+  with_items: "{{ users }}"
+
+- name: Crear grupos por defecto
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ default_groups | default([]) }}"
+
+- name: Create functional groups
+  group:
+    name: "{{ item }}-hml"
+    state: present
+  loop: "{{ stack_groups }}"
+
+- name: Asegurar usuarios
+  ansible.builtin.user:
+    name: "{{ item.username }}"
+    shell: "{{ item.shell | default(default_shell) }}"
+    groups: "{{ default_groups | join(',') }}"
+    append: true
+    state: "{{ item.state | default('present') }}"  
+    create_home: true
+  loop: "{{ users }}"
+  register: user_creation
+
+- name: Desplegar authorized_keys (modo dual si corresponde)
+  ansible.posix.authorized_key:
+    user: "{{ item.username }}"
+    key: "{{ item.ssh_keys | join('\n') }}"
+    state: present
+    manage_dir: true
+    exclusive: true
+  loop: "{{ users }}"
+  when: not ansible_check_mode or user_creation is success
+
+- name: Configurar sudoers si se pide
+  when: item.sudo | default(false)
+  ansible.builtin.template:
+    src: sudoers.j2
+    dest: "/etc/sudoers.d/{{ item.username }}"
+    mode: "0440"
+  loop: "{{ users }}"
+
+- name: Validate SSH key types
+  shell: "ssh-keygen -l -f {{ item }}"
+  register: key_check
+  failed_when: >
+    "ED25519" not in key_check.stdout and
+    ("RSA" in key_check.stdout and "4096" not in key_check.stdout)
+  with_fileglob:
+    - "roles/users/files/public_keys/*.pub"
+
+- name: Validate environment requirements
+  block:
+    - name: Check user requirements
+      assert:
+        that:
+          - "item.username is match(username_pattern) or item.username is match(service_account_pattern)"
+          - "not item.groups is defined or (item.groups | difference(allowed_groups | default([])) | length == 0)"
+        fail_msg: "User validation failed for {{ item.username }}. Groups must be in: {{ allowed_groups | default([]) }}"
+      with_items: "{{ users }}"
+  rescue:
+    - name: Log validation failure
+      debug:
+        msg: "Failed to validate user requirements"
+      failed_when: true
+
+- name: Apply environment specific permissions
+  block:
+    - name: Set sudo access
+      template:
+        src: sudoers.j2
+        dest: "/etc/sudoers.d/{{ item.username }}"
+        validate: 'visudo -cf %s'
+        mode: '0440'
+      with_items: "{{ users }}"
+      when: item.groups | intersect(sudo_groups) | length > 0
+  rescue:
+    - name: Remove incomplete sudoers file
+      file:
+        path: "/etc/sudoers.d/{{ item.username }}"
+        state: absent
+      with_items: "{{ users }}"
+
+# 2FA (Google Authenticator) tasks removed per request

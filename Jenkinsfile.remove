@@ -1,0 +1,71 @@
+ pipeline {
+    agent { label 'ansible-node' }
+    options { timestamps() }
+
+    parameters {
+        choice(name: 'ENVIRONMENTS', choices: ['dev', 'qa', 'hml', 'prd'], description: 'Ambiente donde eliminar usuarios')
+        booleanParam(name: 'LIST_USERS', defaultValue: true, description: 'Listar usuarios existentes primero')
+        text(name: 'USERS_TO_REMOVE', defaultValue: '', description: 'Lista de usuarios a eliminar (uno por línea)')
+        booleanParam(name: 'CONFIRM_REMOVAL', defaultValue: false, description: 'Confirmar eliminación de usuarios')
+    }
+
+    environment {
+        ANSIBLE_CONFIG = "${WORKSPACE}/ansible.cfg"
+        REPORTS_DIR = "${WORKSPACE}/removal_reports"
+        SSH_DEPLOY_ID = 'ssh-deploy-asi'
+    }
+
+    stages {
+        stage('Checkout') { 
+            steps { 
+                checkout scm 
+                sh 'mkdir -p ${REPORTS_DIR}'
+            }
+        }
+
+        stage('List Current Users') {
+            steps {
+                sshagent(credentials: [env.SSH_DEPLOY_ID]) {
+                    sh '''
+                        ansible-playbook -i inventory/hosts.ini playbooks/remove_users.yml \
+                            -l "${ENVIRONMENTS}" -b -v \
+                            -e "backup_only=true"
+                    '''
+                }
+            }
+        }
+
+        stage('Remove Users') {
+            when { 
+                allOf {
+                    expression { return !params.BACKUP_ONLY }
+                    expression { return params.CONFIRM_REMOVAL }
+                }
+            }
+            steps {
+                sshagent(credentials: [env.SSH_DEPLOY_ID]) {
+                    sh '''
+                        ansible-playbook -i inventory/hosts.ini playbooks/remove_users.yml \
+                            -l "${ENVIRONMENTS}" -b -v
+                    '''
+                }
+            }
+        }
+
+        stage('Generate Report') {
+            steps {
+                sh '''
+                    find /tmp -name "removal_report_*.txt" -exec cp {} ${REPORTS_DIR}/ \\;
+                    find /tmp -name "users_before_removal_*.json" -exec cp {} ${REPORTS_DIR}/ \\;
+                '''
+                archiveArtifacts artifacts: 'removal_reports/*', fingerprint: true
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs(patterns: [[pattern: 'removal_reports/**', type: 'INCLUDE']])
+        }
+    }
+}

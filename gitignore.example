@@ -1,0 +1,33 @@
+# Ejemplo de gitignore extendido para despliegues derivados.
+# Copia el contenido relevante a tu propio .gitignore local.
+
+# Inventarios reales y host_vars con datos sensibles
+inventory/hosts.ini
+inventory/hosts_*.ini
+inventory/host_vars/
+!inventory/host_vars/.gitkeep
+
+# Variables de grupo cifradas o con secretos
+**/*vault.yml
+**/*secrets.yml
+
+# Archivos que contienen credenciales o claves
+*.pem
+*.key
+*.pfx
+roles/users/files/public_keys/*.pub
+*.jks
+
+# Salidas y reportes generados por playbooks
+reports/
+logs/
+
+# Virtualenv, dependencias locales y binarios
+.venv/
+*.egg-info/
+__pycache__/
+
+# Configuración de IDEs
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,13 @@
+---
+environment: prd
+sudo_timeout: 15
+allowed_groups:
+  - ops
+  - devops
+max_sessions_per_user: 2
+password_max_days: 30
+ssh_allow_groups:
+  - ops
+  - devops
+  - sysadmins
+require_2fa: true

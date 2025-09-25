@@ -1,0 +1,20 @@
+---
+- name: Check SSH directory permissions
+  stat:
+    path: "/home/{{ item }}/.ssh"
+  register: ssh_dir
+  loop: "{{ target_users }}"
+  failed_when: >
+    ssh_dir.stat.exists and
+    (ssh_dir.stat.mode != '0700' or
+     ssh_dir.stat.pw_name != item)
+
+- name: Validate authorized_keys permissions
+  stat:
+    path: "/home/{{ item }}/.ssh/authorized_keys"
+  register: auth_keys
+  loop: "{{ target_users }}"
+  failed_when: >
+    auth_keys.stat.exists and
+    (auth_keys.stat.mode != '0600' or
+     auth_keys.stat.pw_name != item)

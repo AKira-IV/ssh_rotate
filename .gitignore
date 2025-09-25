@@ -1,0 +1,37 @@
+# --- Ansible sensitive configuration ---
+# Keep real inventories out of version control; commit only sanitized examples.
+inventory/hosts.ini
+collections/*/
+collections/ansible_collections/
+inventory/*_private.ini
+inventory/host_vars/
+inventory/*_local.ini
+inventory/host_vars/*.yml
+!inventory/host_vars/*.example.yml
+
+# Store secrets in vault-encrypted files rather than plain YAML.
+**/*.vault.yml
+**/*.secret.yml
+**/*.enc
+*.pem
+*.key
+*.crt
+roles/users/files/public_keys/*.pub
+
+# Generated reports and audit exports may include user data.
+reports/*.txt
+reports/*.log
+reports/*.json
+
+# Python / Ansible artefacts
+*.retry
+__pycache__/
+*.py[cod]
+.venv/
+.env
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

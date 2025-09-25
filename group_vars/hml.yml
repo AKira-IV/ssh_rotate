@@ -1,0 +1,12 @@
+---
+environment: hml
+sudo_timeout: 30
+allowed_groups:
+  - hml
+  - devops
+max_sessions_per_user: 3
+password_max_days: 45
+ssh_allow_groups:
+  - hml
+  - devops
+  - sysadmins

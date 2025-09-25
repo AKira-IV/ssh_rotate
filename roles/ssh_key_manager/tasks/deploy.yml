@@ -1,0 +1,27 @@
+---
+- name: Deploy ED25519 keys
+  authorized_key:
+    user: "{{ item }}"
+    key: "{{ ed25519_pub_map[item] }}"
+    state: present
+    manage_dir: true
+    exclusive: "{{ exclusive_keys | default(false) }}"
+  loop: "{{ target_users }}"
+  when:
+    - rotate_ed25519 | default(true)
+    - ed25519_pub_map is defined
+    - ed25519_pub_map[item] is defined
+
+- name: Deploy RSA keys (if needed)
+  authorized_key:
+    user: "{{ item }}"
+    key: "{{ rsa_pub_map[item] }}"
+    state: present
+    manage_dir: true
+    exclusive: false
+  loop: "{{ target_users }}"
+  when:
+    - rotate_rsa | default(false)
+    - rsa_pub_map is defined
+    - rsa_pub_map[item] is defined
+    - inventory_hostname in groups.get('legacy_ssh_rsa', [])

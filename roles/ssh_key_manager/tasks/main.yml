@@ -1,0 +1,10 @@
+---
+- name: Validate current SSH configuration
+  import_tasks: validate.yml
+
+- name: Deploy new keys
+  import_tasks: deploy.yml
+  when:
+    - target_users is defined
+    - (ed25519_pub_map is defined and ed25519_pub_map | length > 0) or
+      (rsa_pub_map is defined and rsa_pub_map | length > 0)

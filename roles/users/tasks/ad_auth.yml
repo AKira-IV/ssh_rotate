@@ -1,0 +1,29 @@
+---
+- name: Install SSSD and required packages
+  package:
+    name:
+      - sssd
+      - sssd-ldap
+      - oddjob-mkhomedir
+      - authselect
+    state: present
+
+- name: Configure SSSD for AD
+  template:
+    src: sssd.conf.j2
+    dest: /etc/sssd/sssd.conf
+    mode: '0600'
+  notify: restart sssd
+
+- name: Enable SSSD service
+  service:
+    name: sssd
+    state: started
+    enabled: yes
+
+- name: Configure PAM for AD authentication
+  lineinfile:
+    path: /etc/pam.d/sshd
+    line: "auth required pam_sss.so"
+    insertafter: "@include common-auth"
+    state: present

@@ -1,0 +1,12 @@
+---
+legacy_ssh_config:
+  rsa_min_size: 2048
+  allowed_algorithms:
+    - ssh-rsa
+  legacy_users:
+    - pattern: "legacy_*"
+      force_command: "/bin/bash"
+  ssh_config_options:
+    PubkeyAcceptedKeyTypes: "+ssh-rsa"
+    HostKeyAlgorithms: "+ssh-rsa"
+    KexAlgorithms: "+diffie-hellman-group14-sha1"

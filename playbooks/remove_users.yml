@@ -1,0 +1,86 @@
+---
+- name: Remove users from servers
+  hosts: "{{ limit | default('all') }}"
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    mode: "{{ lookup('env', 'MODE') | default('list', true) }}"
+    protected_users:
+      - deploy
+      - svc-app
+      - root
+      - svc-ansible
+      - systemd-*
+      - dbus
+      - sssd
+      - sshd
+      - chrony
+      - rngd
+      - rpc
+      - rpcuser
+
+  pre_tasks:
+    - name: Ensure reports directory exists
+      local_action:
+        module: file
+        path: "{{ playbook_dir }}/../reports"
+        state: directory
+        mode: '0755'
+      become: no
+      run_once: yes
+
+    - name: Get current users
+      shell: "getent passwd | cut -d: -f1"
+      register: current_users
+      changed_when: false
+
+    - name: Create local temporary file with users
+      copy:
+        content: "{{ current_users.stdout }}"
+        dest: "{{ playbook_dir }}/../reports/users_before_removal_{{ inventory_hostname }}.txt"
+      delegate_to: localhost
+      become: no
+
+    - name: Display current users
+      debug:
+        msg: "Current users on {{ inventory_hostname }}: {{ current_users.stdout_lines | difference(protected_users) }}"
+      when: mode == 'list'
+
+  tasks:
+    - name: List removable users
+      debug:
+        msg: "Users that can be removed on {{ inventory_hostname }}:\n{{ current_users.stdout_lines | difference(protected_users) | join('\n') }}"
+      when: mode == 'list'
+
+    - name: Remove selected users
+      user:
+        name: "{{ item }}"
+        state: absent
+        remove: yes
+        force: yes
+      loop: "{{ users_to_remove | default([]) }}"
+      when: 
+        - mode == 'remove'
+        - item not in protected_users
+        - item in current_users.stdout_lines
+
+    - name: Get final user list
+      shell: "getent passwd | cut -d: -f1"
+      register: final_users
+      changed_when: false
+      when: mode == 'remove'
+
+    - name: Save removal report
+      copy:
+        content: |
+          Users removed from {{ inventory_hostname }} at {{ ansible_date_time.iso8601 }}:
+          {% for user in current_users.stdout_lines %}
+          {% if user not in protected_users and user not in final_users.stdout_lines %}
+          - {{ user }}
+          {% endif %}
+          {% endfor %}
+        dest: "{{ playbook_dir }}/../reports/removal_report_{{ inventory_hostname }}.txt"
+      delegate_to: localhost
+      become: no
+      when: mode == 'remove'

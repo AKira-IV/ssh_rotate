@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+{% if environment == 'prd' %}
+{{ item.username }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl status *, /usr/bin/systemctl restart *
+{% elif environment == 'hml' %}
+{{ item.username }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl *
+{% else %}
+{{ item.username }} ALL=(ALL) NOPASSWD: ALL
+{% endif %}

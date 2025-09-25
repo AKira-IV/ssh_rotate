@@ -1,0 +1,80 @@
+---
+# SSH Configuration
+ssh_config:
+  PasswordAuthentication: "no"
+  PermitRootLogin: "no"
+  MaxAuthTries: 3
+  PubkeyAcceptedAlgorithms: "ssh-ed25519,rsa-sha2-512,rsa-sha2-256"
+  MaxSessions: 10
+
+# User Management Patterns
+username_pattern: '^[a-z]+\.[a-z]+(-[0-9]+)?$'
+service_account_pattern: '^svc-[a-z]+-[a-z]+$'
+
+# Default groups that every managed user should inherit
+base_groups:
+  - unix-admins
+  - readonly
+  - audit
+
+stack_groups:
+  - docker
+  - java
+  - django
+  - python
+  - nodejs
+
+# Audit & rotation policies
+audit_retention_days: 180
+key_rotation_months: 12
+emergency_response_hours: 24
+
+# Default user characteristics
+default_shell: /bin/bash
+default_groups: ["sudo"]
+
+users:
+  - username: example.user
+    name: Example User
+    use_ssh_key: true
+    ssh_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeExampleKeyString000000000000000000000 example.user@example.org"
+    state: present
+    sudo: true
+    groups:
+      - sudo
+      - docker-dev
+
+# Groups allowed to use sudo
+sudo_groups:
+  - sudo
+
+# Environment specific groups allowed across tiers
+allowed_groups:
+  - sudo
+  - docker-dev
+  - java-dev
+  - django-dev
+  - python-dev
+  - nodejs-dev
+
+# Protected users that should never be removed
+protected_users:
+  - deploy
+  - svc-backup
+  - root
+
+# Sudo policy templates for different group profiles
+sudo_policies:
+  infra_admins:
+    - "%sudo ALL=(ALL) NOPASSWD:ALL"
+  readonly:
+    - "%readonly ALL=(ALL) !ALL"
+
+# Active Directory / LDAP placeholders
+ad_auth:
+  enabled: true
+  domain: "example.org"
+  ldap_uri: "ldap://ad.example.org"
+  base_dn: "DC=example,DC=org"
+  user_pattern: "^[a-z][a-z]+\\.[a-z]+$"

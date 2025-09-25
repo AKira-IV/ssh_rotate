@@ -1,0 +1,2 @@
+# Lista por defecto vacía; define usuarios en group_vars.
+users: []

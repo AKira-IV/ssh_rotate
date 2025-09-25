@@ -1,0 +1,34 @@
+# Copia este archivo a inventory/hosts.ini y personalízalo con tus hosts reales.
+# Mantén inventory/hosts.ini fuera de git usando el .gitignore.
+
+[dev_app]
+dev-app-01.example.com ansible_host=192.0.2.10
+
+[dev_docker]
+dev-docker-01.example.com ansible_host=192.0.2.20 ansible_user=deploy
+
+[qa_app]
+qa-app-01.example.com ansible_host=198.51.100.10
+
+[prd_app]
+prd-app-01.example.com ansible_host=203.0.113.10
+prd-app-02.example.com ansible_host=203.0.113.11
+
+# Grupos padres por ambiente
+[dev:children]
+dev_app
+dev_docker
+
+[qa:children]
+qa_app
+
+[prd:children]
+prd_app
+
+# Ejemplo de grupo para servidores compartidos
+[shared_services]
+jumphost.example.com ansible_port=2222 ansible_user=jump
+
+[all:vars]
+ansible_connection=ssh
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'

@@ -1,0 +1,12 @@
+---
+environment: dev
+sudo_timeout: 120
+allowed_groups:
+  - developers
+  - devops
+max_sessions_per_user: 10
+password_max_days: 90
+ssh_allow_groups:
+  - developers
+  - devops
+  - sysadmins

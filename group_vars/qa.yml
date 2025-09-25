@@ -1,0 +1,13 @@
+---
+environment: qa
+sudo_timeout: 60
+allowed_groups:
+  - qa
+  - developers
+  - devops
+max_sessions_per_user: 5
+password_max_days: 60
+ssh_allow_groups:
+  - qa
+  - developers
+  - devops

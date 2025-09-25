@@ -1,58 +1,92 @@
+// Jenkinsfile — Pipeline from SCM 
 pipeline {
-  agent any
-  options { timestamps(); ansiColor('xterm'); buildDiscarder(logRotator(numToKeepStr: '30')) }
+  agent { label 'ansible-node' }
+  options { timestamps() }
+
+  /************ PARÁMETROS ************/
   parameters {
-    string(name: 'LIMIT', defaultValue: 'asi_hml_docker', description: 'Patrón de inventario (canary por defecto)')
-    string(name: 'SERIAL', defaultValue: '1', description: 'Hosts en paralelo')
-    booleanParam(name: 'CHECK_MODE', defaultValue: false, description: 'Ansible --check')
-    booleanParam(name: 'USE_CA', defaultValue: false, description: 'Distribuir CA SSH')
-    text(name: 'EMERGENCY_KEYS', defaultValue: '', description: 'break-glass (.pub, una por línea)')
+    string(name: 'USERNAME',  description: 'usuario unix (p.e. usuario.demo)')
+    string(name: 'FULLNAME',  description: 'Nombre y Apellido (Mayus Iniciales)')
+
+    // "Checklist" de ambientes con booleans
+    booleanParam(name: 'ENV_DEV', defaultValue: false, description: 'Deploy a DEV')
+    booleanParam(name: 'ENV_QA',  defaultValue: false, description: 'Deploy a QA')
+    booleanParam(name: 'ENV_HML', defaultValue: true,  description: 'Deploy a HML')
+    booleanParam(name: 'ENV_PRD', defaultValue: false, description: 'Deploy a PRD')
+
+    booleanParam(name: 'LEGACY_RSA', defaultValue: false, description: '¿Agregar RSA (legacy)?')
+
+    // Subida de archivos .pub (necesita plugin File Parameter)
+    file(name: 'PUB_ED25519_FILE', description: 'Subir archivo .pub ED25519 (opcional)')
+    file(name: 'PUB_RSA_FILE',     description: 'Subir archivo .pub RSA (opcional, si LEGACY)')
+
+    // Fallback pegando el contenido .pub
+    text(name: 'PUB_ED25519', defaultValue: '', description: 'Pegar .pub ED25519 si no subís archivo')
+    text(name: 'PUB_RSA',     defaultValue: '', description: 'Pegar .pub RSA si no subís archivo')
+
+    // Seguridad de ejecución
+    booleanParam(name: 'PLAN_ONLY', defaultValue: true,  description: 'Solo plan (check+diff), no aplica cambios')
+    booleanParam(name: 'APPLY_NOW', defaultValue: false, description: 'Aplicar cambios (post-merge, en main)')
   }
+
+  /************ VARIABLES ************/
   environment {
-    ROTATION_ID = "${new Date().format('yyyyMMddHHmmss')}"
+    GIT_EMAIL      = 'cicd@example.org'
+    GIT_NAME       = 'CI Jenkins'
+    ANSIBLE_CONFIG = "${WORKSPACE}/ansible.cfg"
+    PUBKEY_DIR     = "roles/users/files/public_keys"
+    INVENTORY_PATH = "inventory/hosts.ini"   // <-- ajusta si tu inventario está en otro path
   }
+
+  /************ STAGES ************/
   stages {
-    stage('Prep') {
+    stage('Checkout') { steps { checkout scm } }
+
+    stage('Resolver ambientes') {
       steps {
-        sh 'ansible --version || true'
-        sh 'mkdir -p artifacts'
-        writeFile file: 'artifacts/emergency.txt', text: params.EMERGENCY_KEYS
+        script {
+          def envs = []
+          if (params.ENV_DEV) envs << 'dev'
+          if (params.ENV_QA)  envs << 'qa'
+          if (params.ENV_HML) envs << 'hml'
+          if (params.ENV_PRD) envs << 'prd'
+          if (envs.isEmpty()) error('Debes seleccionar al menos un ambiente.')
+          env.ENVIRONMENTS = envs.join(',')
+          echo "Ambientes seleccionados: ${env.ENVIRONMENTS}"
+        }
       }
     }
-    stage('Rotate + Validate') {
+
+    stage('Preparar claves') {
       steps {
-        sh """
-          ansible-playbook -i inventories/hosts playbooks/site_ssh.yml \
-            -l '${params.LIMIT}' ${params.CHECK_MODE ? '--check' : ''} \
-            --extra-vars "rotation_id=${env.ROTATION_ID} rotation_serial=${params.SERIAL} emergency_keys='$(tr '\\n' '|' < artifacts/emergency.txt)'" \
-          | tee artifacts/rotation_${env.ROTATION_ID}.log
-        """
-      }
-    }
-    stage('CA (opcional)') {
-      when { expression { return params.USE_CA } }
-      steps {
-        sh """
-          ansible-playbook -i inventories/hosts playbooks/site_ssh.yml \
-            -l '${params.LIMIT}' --extra-vars "use_ca=true"
-        """
-      }
-    }
-    stage('Reports') {
-      steps {
-        sh 'cp -a /tmp/ssh_validation_*_$(date +%F).json artifacts/ 2>/dev/null || true'
-        archiveArtifacts artifacts: 'artifacts/**', fingerprint: true
-      }
-    }
-  }
-  post {
-    unsuccessful {
-      sh """
-        test -f failed_hosts_${env.ROTATION_ID}.txt && \
-        ansible-playbook -i inventories/hosts playbooks/ssh_key_rollback.yml \
-          --extra-vars "rollback_rotation_id=${env.ROTATION_ID}" -l '${params.LIMIT}' || true
-      """
-      archiveArtifacts artifacts: "failed_hosts_${env.ROTATION_ID}.txt", fingerprint: true, onlyIfSuccessful: false
-    }
-  }
-}
+        sh '''#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$PUBKEY_DIR"
+
+have_file()   { [[ -n "${1:-}" && -f "$1" ]]; }
+sanitize()    { tr -d '\\r' | sed -E 's/[[:space:]]+$//' ; }
+oneline()     { [[ $(wc -l < "$1") -eq 1 ]]; }
+
+ED_DST="$PUBKEY_DIR/${USERNAME}.ed25519.pub"
+RSA_DST="$PUBKEY_DIR/${USERNAME}.rsa.pub"
+
+# --- ED25519 (obligatoria) ---
+if have_file "${PUB_ED25519_FILE:-}"; then
+  cp -f "${PUB_ED25519_FILE}" "$ED_DST"
+elif [[ -n "${PUB_ED25519:-}" ]]; then
+  printf "%s\\n" "$PUB_ED25519" | sanitize > "$ED_DST"
+else
+  echo "ERROR: Debes proporcionar ED25519 por archivo o texto." >&2
+  exit 1
+fi
+[[ -s "$ED_DST" ]] || { echo "ED25519 vacía"; exit 1; }
+oneline "$ED_DST" || { echo "ED25519 debe ser una sola línea"; exit 1; }
+grep -q '^ssh-ed25519 ' "$ED_DST" || { echo "ED25519 inválida (falta prefijo ssh-ed25519)"; exit 1; }
+./scripts/validate_pubkey.sh "$ED_DST"
+
+# --- RSA (opcional si LEGACY) ---
+if [[ "${LEGACY_RSA}" == "true" ]]; then
+  if have_file "${PUB_RSA_FILE:-}"; then
+    cp -f "${PUB_RSA_FILE}" "$RSA_DST"
+  elif [[ -n "${PUB_RSA:-}" ]]; then
+    printf "%s\\n" "$PUB_RSA"_

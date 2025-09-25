@@ -1,0 +1,7 @@
+---
+- name: Manage user access
+  hosts: all
+  become: true
+  gather_facts: no
+  roles:
+    - users
