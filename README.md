@@ -65,5 +65,3 @@ MODE=list ansible-playbook -i inventory/hosts.ini playbooks/remove_users.yml
 3. Incluye ejemplos anonimizados cuando documentes cambios.
 4. No adjuntes secretos ni inventarios reales en issues o PRs.
 
-## Licencia
-Define la licencia que prefieras para uso público (MIT, Apache-2.0, etc.) antes de publicar.
